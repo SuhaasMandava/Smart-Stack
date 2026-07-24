@@ -1,179 +1,134 @@
-# SmartStack 📚
+# SmartStack
 
-**An AI-ready study planner for students.**
+A browser-based study planner that schedules a student's assignments and records how long each one *actually* takes versus how long they *estimated* it would.
 
-Students enter their assignments and deadlines; SmartStack auto-builds a weekly
-study schedule and tracks how long tasks *actually* take versus how long they
-were *estimated* to take. That estimate-vs-actual signal powers simple insights
-today — and is the seed of a machine-learning duration predictor tomorrow.
+**▶ Live demo: [smart-stack-green.vercel.app](https://smart-stack-green.vercel.app/)**
 
----
-
-## ✨ Features
-
-- **Tasks** — add, edit, delete, and complete assignments with a clean,
-  validated form. Completing a task prompts you for the *actual* minutes it took,
-  so the app learns how good your estimates are.
-- **Smart scheduler** — a pure, greedy algorithm scores every open task by
-  deadline urgency + priority, then packs your available study hours across the
-  next 7 days.
-- **Weekly Schedule** — a 7-day calendar view of the generated plan. Change your
-  available hours per day and watch the plan re-flow instantly.
-- **Dashboard** — what's due soon, task counts, a progress bar, an overall
-  estimate-accuracy score, and a Recharts chart of estimated vs. actual time.
-- **Insights** — plain-language observations like *"You tend to underestimate
-  essay tasks by ~35%."* This module is intentionally isolated — it's the seed
-  of the future ML feature.
-- **Light / dark mode**, responsive layout, and example seed data on first run.
+![SmartStack dashboard](docs/screenshots/dashboard.png)
 
 ---
 
-## 🚀 Getting started
+## The idea
 
-Requires **Node 18+**.
+Students are consistently bad at estimating how long schoolwork will take. SmartStack turns that weakness into data: every time you finish a task, it asks how long the task *actually* took and stores that next to your original estimate. Over time this builds a personal record of where your estimates go wrong — broken down by task type and priority.
 
-```bash
-npm install     # install dependencies
-npm run dev     # start the dev server (http://localhost:5173)
-```
-
-Other scripts:
-
-```bash
-npm run build   # type-check + production build to dist/
-npm run preview # preview the production build locally
-```
-
-On first launch the app seeds a handful of realistic example tasks (some already
-completed with logged times) so every page has something to show. All data lives
-in your browser's `localStorage` — there's no backend yet.
+That dataset is the point of the project. Today the app reports the error back to you as plain statistics (for example, "you underestimate essays by about 44%"). The longer-term goal is to train a duration-prediction model on the same data so the app can correct your estimates automatically. **That model is on the roadmap; it is not built yet.** The current version is the data-collection layer it would learn from.
 
 ---
 
-## 🏗️ Architecture & project structure
+## Features
 
-The guiding principle is **isolate the parts that will change**. Data access,
-the scheduling algorithm, and the insights logic each live in their own module
-so they're easy to test, reason about, and later swap out.
+- Add, edit, and delete tasks; mark a task done and log the actual minutes it took.
+- A scheduler that packs open tasks into a configurable daily study budget across the next 7 days, ordered by deadline urgency and priority.
+- A weekly calendar view of the generated plan.
+- A dashboard with a due-soon list, task counts, a completion bar, and an estimated-vs-actual chart.
+- An insights view that computes, per task type, how far your estimates miss. This is descriptive statistics over your completed tasks — not a model.
+- Light and dark mode; responsive down to a phone width.
+- Data persists in the browser via `localStorage`; no account or backend required.
+
+---
+
+### Weekly schedule
+
+The scheduler assigns open tasks to time blocks over the next 7 days, filling each day up to the study budget you set (hours per day and a start time).
+
+![Weekly schedule](docs/screenshots/schedule.png)
+
+### Insights
+
+For every task type with enough completed history, the app shows the gap between estimated and actual time — the raw signal a future prediction model would train on.
+
+![Insights](docs/screenshots/insights.png)
+
+---
+
+## Architecture
+
+The structure follows one principle: isolate the parts most likely to change, so each future step touches as few files as possible. The decisions that matter:
+
+- **`lib/storage.ts` is the only module that touches `localStorage`.** Every read and write goes through it. Replacing the browser store with a real backend later means rewriting this one file — the hooks, pages, and components that call it don't change.
+- **The scheduler is a pure function with an injectable `today`.** `buildSchedule(tasks, options)` performs no I/O and reads no global clock; you pass the reference date in. That makes it deterministic and directly unit-testable.
+- **`priorityScore()` is factored out of the scheduler.** It computes a task's urgency score from its deadline and priority. It sits alone specifically so it can later be swapped for a model-predicted score without rewriting the scheduling loop around it.
+- **`lib/insights.ts` is kept separate on purpose.** It computes exactly the estimate-versus-actual error that a duration-prediction model needs as its training target. Keeping it isolated means the future model can replace its internals without disturbing the UI.
+- **Dates are ISO strings throughout, never `Date` objects.** Values round-trip cleanly through JSON — into `localStorage` today and an HTTP API later — without timezone surprises.
+
+State is shared through a small React context so every page reads one consistent copy of the tasks and settings.
 
 ```
 src/
-├── types/           # Domain types — the single source of truth for data shapes
-│   └── index.ts
-│
-├── lib/             # Pure, framework-free logic (no React, easily testable)
-│   ├── storage.ts   # ⭐ THE ONLY place that touches localStorage
-│   ├── scheduler.ts # ⭐ Pure greedy scheduling algorithm (priorityScore + buildSchedule)
-│   ├── insights.ts  # ⭐ Estimate-vs-actual analysis (seed of the future ML model)
-│   ├── seed.ts      # Example tasks loaded on first run
-│   ├── dates.ts     # Small date/time helpers (ISO strings in, labels out)
-│   ├── taskMeta.ts  # Enum → label/colour mappings for the UI
-│   └── id.ts        # Unique id generation
-│
-├── hooks/           # React state, backed by the lib layer
-│   ├── useTasks.ts    # Task CRUD + persistence
-│   ├── useSettings.ts # Availability settings + persistence
-│   └── useTheme.ts    # Light/dark theme
-│
-├── context/
-│   └── AppDataContext.tsx  # Shares one task/settings store across all pages
-│
-├── components/      # Reusable presentational components
-│   ├── ui/          # Primitives: Card, Button, Badge, Modal, Field
-│   ├── Layout.tsx, Sidebar.tsx, ThemeToggle.tsx   # App shell + nav
-│   ├── TaskForm.tsx, TaskItem.tsx, CompleteTaskModal.tsx
-│   ├── ProgressBar.tsx, EstimateVsActualChart.tsx
-│   └── icons.tsx
-│
-├── pages/           # One component per route
-│   ├── Dashboard.tsx     # Home — due soon, counts, progress, chart
-│   ├── TasksPage.tsx     # Add / edit / delete / complete tasks
-│   ├── SchedulePage.tsx  # 7-day calendar of scheduled blocks
-│   └── InsightsPage.tsx  # Estimate-accuracy insights
-│
-├── App.tsx          # Router + data provider wiring
-└── main.tsx         # Entry point
+├── lib/            # Pure logic, no React — this is what the tests cover
+│   ├── storage.ts      # The only module that touches localStorage
+│   ├── scheduler.ts    # Greedy scheduler + priorityScore (pure, injectable date)
+│   ├── insights.ts     # Estimate-vs-actual statistics (future ML training signal)
+│   └── dates.ts        # ISO-string date helpers
+├── hooks/          # React state layered over lib/ (useTasks, useSettings, useTheme)
+├── context/        # Shared task + settings store
+├── components/     # Reusable UI, with ui/ primitives (Card, Button, Modal, …)
+├── pages/          # Dashboard, Tasks, Schedule, Insights
+└── types/          # Domain types — the single source of truth for data shapes
 ```
 
-### Key decisions
+---
 
-- **`storage.ts` is the only seam to persistence.** Every read/write funnels
-  through it. When the FastAPI backend lands, this one file becomes `fetch`
-  calls (likely async) and the rest of the app barely changes. Hooks depend on
-  `storage`, never on `window.localStorage`.
-- **The scheduler is a pure function.** `buildSchedule(tasks, options)` has no
-  I/O and takes an injectable `today`, so it's deterministic and trivial to unit
-  test. The scoring rule (`priorityScore`) is factored out on purpose — it's the
-  natural place to later drop in an ML-predicted score.
-- **The insights engine is isolated for a reason.** Today it's descriptive
-  statistics (per-type estimate bias). The estimate-vs-actual gap it measures is
-  exactly the training signal a duration-prediction model would use, so keeping
-  it in `lib/insights.ts` means the UI won't move when the model arrives.
-- **Dates are stored as ISO strings**, never `Date` objects, so everything
-  round-trips cleanly through JSON/localStorage and, later, an API.
-- **Shared state via a small context** so every page reads one consistent copy
-  of the tasks, rather than each page holding its own.
+## Testing
+
+30 unit tests run with [Vitest](https://vitest.dev/), covering the two pure modules where the real logic lives:
+
+- **`scheduler.ts`** — priority scoring (sooner deadlines and higher priority rank first; overdue handling; ties), and `buildSchedule` (deterministic output for a fixed date, respects the daily budget, excludes completed tasks, and splits a task across days when it doesn't fit in one).
+- **`insights.ts`** — estimate-vs-actual math grouped by task type, correct handling of zero completed tasks, and no division-by-zero on empty or zero-estimate input.
+
+```bash
+npm run test:run    # run once
+npm test            # watch mode
+```
+
+One scheduler test documents a **known limitation rather than hiding it**: when total open work exceeds the 7-day capacity, `buildSchedule` schedules up to capacity and silently drops the remainder, with no signal in the return value. The test asserts that current behavior, and the gap is tracked in [issue #1](https://github.com/SuhaasMandava/Smart-Stack/issues/1). A documented limitation with a test proving it is deliberate — the fix will update the test to assert the new behavior.
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
-1. **ML duration predictor** — replace the rule-based insights with a model that
-   predicts how long a task will actually take (from type, priority, time of
-   day, history) and feeds smarter estimates back into the scheduler.
-2. **FastAPI backend (Python)** — move persistence off `localStorage` and behind
-   an API, with accounts and cross-device sync. Only `lib/storage.ts` changes on
-   the frontend.
-3. **Calendar-feed integrations** — pull deadlines automatically from
-   **Google Calendar**, **Canvas**, and **Infinite Campus**, and push the
-   generated study blocks back out.
-
----
-
-## 🔒 Security
-
-SmartStack is a fully static single-page app with no backend, no authentication,
-and no outbound network calls — all data lives in the browser's `localStorage`.
-The main hardening surface is therefore the HTTP response headers, defined in
-[`vercel.json`](vercel.json) (authoritative for production on Vercel) and mirrored
-into `vite.config.ts` under `preview.headers` so `npm run preview` reproduces the
-exact same policy locally. **Keep the two in sync** if you change either.
-
-| Header | Value | Why |
+| Phase | Scope | Status |
 |---|---|---|
-| **Content-Security-Policy** | see below | Restricts where scripts, styles, images, and connections can come from — the primary defense against XSS and data exfiltration. |
-| **X-Frame-Options** | `DENY` | Blocks the app from being embedded in an `<iframe>`, preventing clickjacking. (Reinforced by CSP `frame-ancestors 'none'`.) |
-| **X-Content-Type-Options** | `nosniff` | Stops browsers from MIME-sniffing responses into an unexpected type. |
-| **Referrer-Policy** | `strict-origin-when-cross-origin` | Sends only the origin (not the full path) on cross-origin navigations, avoiding referrer leakage. |
-| **Permissions-Policy** | `camera=(), microphone=(), geolocation=()` | Explicitly denies powerful device APIs the app never uses. |
+| **1 — Task management** | Task CRUD, `localStorage` persistence, seed data | ✅ Complete |
+| **2 — Scheduling & insights** | Greedy scheduler, weekly view, dashboard, estimate-vs-actual statistics | ✅ Complete |
+| **3 — Quality & deployment** | 30 unit tests, CSP + security headers, live on Vercel | ✅ Complete |
+| **4 — ML duration predictor + FastAPI backend** | Train a model on the collected estimate/actual data to predict task duration; move persistence behind a Python API | ⬜ Not started |
+| **5 — Calendar-feed integrations** | Import deadlines from Google Calendar, Canvas, and Infinite Campus | ⬜ Planned |
+| **6 — Accounts & cross-device sync** | User accounts and syncing data across devices via the backend | ⬜ Planned |
 
-### Content-Security-Policy, directive by directive
-
-- `default-src 'self'` — deny-by-default; everything not overridden below must be same-origin.
-- `script-src 'self' 'sha256-…'` — only our own bundled JS runs, plus the one inline
-  theme script in `index.html` (which applies light/dark mode before first paint to
-  avoid a flash). That script is allow-listed by its **exact sha256 hash**, not by
-  `'unsafe-inline'`, so no other inline script can execute. **If you edit that script,
-  recompute the hash** (sha256 of the script's exact text content, base64-encoded) or it
-  will be blocked.
-- `style-src 'self' 'unsafe-inline'` — `'unsafe-inline'` is a **deliberate, documented
-  choice**: Recharts sets inline `style` attributes directly on the SVG elements it
-  renders, and the charts break without it. It's the one intentional loosening; every
-  other directive stays strict.
-- `img-src 'self' data:` — same-origin images plus `data:` URIs (used for small inline assets).
-- `font-src 'self'` — the app uses system fonts only; no external font CDNs.
-- `connect-src 'self'` — there is no API, so no cross-origin fetch/XHR/WebSocket is permitted.
-- `object-src 'none'` / `base-uri 'self'` / `form-action 'self'` — disable plugins, lock
-  down `<base>`, and restrict form submission targets.
-- `frame-ancestors 'none'` — nobody may frame this app.
-- `upgrade-insecure-requests` — force any stray `http:` sub-resource to `https:`.
-
-The policy was verified end-to-end in headless Chrome against `npm run preview`:
-every route (Dashboard, Tasks, Schedule, Insights), the Recharts chart, and the
-dark-mode toggle load with **zero CSP violations**.
+Phase 4 is where machine learning enters the project. It has not been started — the current app collects and displays the data that phase would use.
 
 ---
 
-## 🛠️ Tech stack
+## Running locally
 
-React 18 · Vite · TypeScript · Tailwind CSS · React Router · Recharts
+Prerequisites: **Node 18+** and npm.
+
+```bash
+npm install     # install dependencies
+npm run dev     # start the dev server at http://localhost:5173
+npm run build   # type-check and build to dist/
+```
+
+---
+
+## Security
+
+SmartStack is a fully static single-page app with no backend, no authentication, and no outbound network calls, so the main hardening surface is the HTTP response headers. They are defined in [`vercel.json`](vercel.json) (authoritative for production) and mirrored into `vite.config.ts` under `preview.headers` so `npm run preview` reproduces the same policy locally.
+
+| Header | Purpose |
+|---|---|
+| **Content-Security-Policy** | Restricts where scripts, styles, images, and connections may load from — the primary defense against XSS. |
+| **X-Frame-Options: DENY** | Blocks framing (clickjacking); reinforced by CSP `frame-ancestors 'none'`. |
+| **X-Content-Type-Options: nosniff** | Prevents MIME-sniffing responses into an unexpected type. |
+| **Referrer-Policy: strict-origin-when-cross-origin** | Avoids leaking full paths in the referrer header. |
+| **Permissions-Policy** | Denies camera, microphone, and geolocation — APIs the app never uses. |
+
+The CSP is strict: `default-src 'self'`, no cross-origin `connect-src`, `object-src 'none'`. The one inline script (the pre-paint theme setter in `index.html`) is allow-listed by its exact **sha256 hash** rather than `'unsafe-inline'` — recompute the hash if that script changes. `style-src` keeps `'unsafe-inline'` as a single deliberate exception, because Recharts writes inline `style` attributes on the SVG elements it renders. The policy was verified in headless Chrome across every route, the chart, and the theme toggle with zero CSP violations.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE). © 2026 Suhaas Mandava.
