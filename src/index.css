@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Global base styles. We keep this file tiny — Tailwind utility classes do the
+ * heavy lifting in the components. These few rules set the app-wide background,
+ * text colour, and default font, and make dark mode transitions feel smooth.
+ */
+@layer base {
+  html {
+    @apply antialiased;
+  }
+  body {
+    @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
+      sans-serif;
+  }
+}
+
+@layer components {
+  /* Reusable focus ring for interactive elements. */
+  .focus-ring {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950;
+  }
+}
