@@ -130,6 +130,50 @@ src/
 
 ---
 
+## 🔒 Security
+
+SmartStack is a fully static single-page app with no backend, no authentication,
+and no outbound network calls — all data lives in the browser's `localStorage`.
+The main hardening surface is therefore the HTTP response headers, defined in
+[`vercel.json`](vercel.json) (authoritative for production on Vercel) and mirrored
+into `vite.config.ts` under `preview.headers` so `npm run preview` reproduces the
+exact same policy locally. **Keep the two in sync** if you change either.
+
+| Header | Value | Why |
+|---|---|---|
+| **Content-Security-Policy** | see below | Restricts where scripts, styles, images, and connections can come from — the primary defense against XSS and data exfiltration. |
+| **X-Frame-Options** | `DENY` | Blocks the app from being embedded in an `<iframe>`, preventing clickjacking. (Reinforced by CSP `frame-ancestors 'none'`.) |
+| **X-Content-Type-Options** | `nosniff` | Stops browsers from MIME-sniffing responses into an unexpected type. |
+| **Referrer-Policy** | `strict-origin-when-cross-origin` | Sends only the origin (not the full path) on cross-origin navigations, avoiding referrer leakage. |
+| **Permissions-Policy** | `camera=(), microphone=(), geolocation=()` | Explicitly denies powerful device APIs the app never uses. |
+
+### Content-Security-Policy, directive by directive
+
+- `default-src 'self'` — deny-by-default; everything not overridden below must be same-origin.
+- `script-src 'self' 'sha256-…'` — only our own bundled JS runs, plus the one inline
+  theme script in `index.html` (which applies light/dark mode before first paint to
+  avoid a flash). That script is allow-listed by its **exact sha256 hash**, not by
+  `'unsafe-inline'`, so no other inline script can execute. **If you edit that script,
+  recompute the hash** (sha256 of the script's exact text content, base64-encoded) or it
+  will be blocked.
+- `style-src 'self' 'unsafe-inline'` — `'unsafe-inline'` is a **deliberate, documented
+  choice**: Recharts sets inline `style` attributes directly on the SVG elements it
+  renders, and the charts break without it. It's the one intentional loosening; every
+  other directive stays strict.
+- `img-src 'self' data:` — same-origin images plus `data:` URIs (used for small inline assets).
+- `font-src 'self'` — the app uses system fonts only; no external font CDNs.
+- `connect-src 'self'` — there is no API, so no cross-origin fetch/XHR/WebSocket is permitted.
+- `object-src 'none'` / `base-uri 'self'` / `form-action 'self'` — disable plugins, lock
+  down `<base>`, and restrict form submission targets.
+- `frame-ancestors 'none'` — nobody may frame this app.
+- `upgrade-insecure-requests` — force any stray `http:` sub-resource to `https:`.
+
+The policy was verified end-to-end in headless Chrome against `npm run preview`:
+every route (Dashboard, Tasks, Schedule, Insights), the Recharts chart, and the
+dark-mode toggle load with **zero CSP violations**.
+
+---
+
 ## 🛠️ Tech stack
 
 React 18 · Vite · TypeScript · Tailwind CSS · React Router · Recharts

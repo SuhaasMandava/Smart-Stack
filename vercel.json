@@ -1,0 +1,30 @@
+{
+  "//": "SECURITY HEADERS — authoritative for PRODUCTION. These must be kept in sync with the `preview.headers` block in vite.config.ts (which only affects `npm run preview` locally; this file is what Vercel actually serves). style-src intentionally keeps 'unsafe-inline': Recharts sets inline style attributes directly on the SVG elements it renders, so removing it would break every chart. script-src pins the exact sha256 of the inline theme script in index.html (which runs before paint to prevent a light/dark flash); if that script changes, recompute the hash or the script will be blocked.",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'sha256-w+4wxkZP0NeNriDhqwD41AMWdbQ0lhbfMZIaqWVrBR4='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        }
+      ]
+    }
+  ]
+}
